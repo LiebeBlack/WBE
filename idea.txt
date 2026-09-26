@@ -1,0 +1,69 @@
+Aquí tienes el prompt completamente reestructurado, expandido y optimizado. Se ha elevado el nivel técnico, se ha incorporado el principio de Responsabilidad Única (Separación de Conceptos) para garantizar un código modular y escalable, y se ha añadido la integración nativa de uBlock Origin en WebView2.
+
+Copia y pega el siguiente texto en tu IA generadora de código:
+
+---
+
+**Actúa como un Arquitecto de Sistemas de Alto Rendimiento, Ingeniero de Software Senior experto en C/C++26, la API de Win32 pura, gestión de memoria a bajo nivel y optimización extrema de motores Chromium.**
+
+Tu tarea es diseñar la arquitectura completa y escribir el código de producción para **"S.M.A.C Web Core"**, un navegador web ultra-minimalista para Windows. Este proyecto está diseñado con restricciones absolutas para hardware de muy bajos recursos (específicamente la arquitectura **Intel Celeron N4120 de 4 núcleos / 4 hilos**) con un objetivo de consumo de RAM estrictamente inferior a 300 MB al reproducir video en YouTube a 1080p.
+
+### 1. Stack Tecnológico Estricto
+
+* **Lenguaje:** C++26 (aprovechando las últimas características de rendimiento y seguridad).
+* **Interfaz (Shell):** API pura de Win32 y Desktop Window Manager (DWM). Cero uso de frameworks GUI pesados (ni Qt, ni ImGui, ni MFC). Cero HTML/CSS para menús.
+* **Motor de Renderizado:** WebView2 (Microsoft Edge Chromium) administrado a bajo nivel.
+* **Aceleración Gráfica:** Direct3D 11 / DXGI.
+* **Asignador de Memoria:** `mimalloc` (de Microsoft), vinculado estáticamente para reemplazar `malloc`/`new` y eliminar la fragmentación de RAM.
+* **Build System:** CMake + Clang/LLVM.
+* **CI/CD:** GitHub Actions.
+
+### 2. Arquitectura Modular y Separación de Responsabilidades (SoC)
+
+El código debe estar estrictamente modularizado. Queda prohibido generar archivos monolíticos de cientos de líneas. Debes aplicar el principio de Responsabilidad Única (Single Responsibility Principle) dividiendo el sistema en módulos claros:
+
+* `App` (Punto de entrada y orquestación).
+* `WindowHost` (Gestión del ciclo de vida Win32, DWM, bordes custom).
+* `WebViewEngine` (Inicialización de Chromium, inyección de perfiles, flags).
+* `ResourceBlocker` (Carga de extensiones como uBlock Origin y cirugía DOM).
+* `SystemOptimizer` (Paginación de memoria nativa, control del scheduler y prioridades de hilos).
+
+### 3. Requisitos de Renderizado y UI Win32 (Cero Excepciones)
+
+* **UI Pitch-Black Frameless:** La ventana Win32 debe ser frameless (sin barra de título estándar). El fondo debe dibujarse en `#000000` puro.
+* **Composición DWM:** Usa `DwmExtendFrameIntoClientArea` para delegar el renderizado del fondo y un borde personalizado de 1px (neón cyan o morado) a la GPU, evitando los lentos eventos GDI (`WM_PAINT`).
+* **Controles Nativos:** Implementar el manejo de `WM_NCHITTEST` para permitir arrastrar la ventana y manejar los botones de control de forma nativa sin HTML.
+
+### 4. Optimizaciones Extremas del Motor (WebView2)
+
+* **Inicialización Restringida (Flags):** Instanciar WebView2 apagando toda la telemetría, métricas y sincronización. Inyectar flags de Chromium para limitar el motor V8: `--max_old_space_size=350`, `--disable-features=IsolateOrigins,site-per-process`, `--renderer-process-limit=2`.
+* **Bloqueo de Recursos Integrado:** Activar el soporte para extensiones en el perfil de WebView2 (`AreBrowserExtensionsEnabled = TRUE`) y cargar localmente **uBlock Origin** descomprimido mediante el flag `--load-extension="ruta/a/ublock"`.
+* **Cirugía DOM Automática:** Complementar uBlock con inyección temprana de JavaScript (`AddScriptToExecuteOnDocumentCreated`) desde C++ para aplicar `display: none !important` o destruir del DOM elementos pesados de YouTube (Shorts, barra lateral, chat en vivo) antes de que el motor intente renderizarlos.
+* **Zero-Copy y VRAM:** Forzar decodificación por hardware en la Intel UHD 600 mediante `--enable-zero-copy`, `--enable-gpu-rasterization`, `--ignore-gpu-blocklist` y `--enable-features=Vulkan`.
+
+### 5. Configuración Estricta de Compilación (Clang / CMake)
+
+El `CMakeLists.txt` debe contener estas especificaciones innegociables:
+
+* **Estándar:** `cxx_std_26` o `-std=c++2c`.
+* **Target de Hardware (Intel N4120):** Optimización vectorial estricta usando `-march=goldmont-plus`. **Prohibido** inyectar instrucciones AVX/AVX2 (generarán SIGILL en esta CPU). Usa SSE4.2 como límite.
+* **Reducción de Binario:** `-fno-exceptions`, `-fno-rtti`.
+* **Linker y Optimización:** ThinLTO (`-flto=thin`) y optimización agresiva de tamaño/caché (`-Os`).
+* **Subsystem Win32:** `WIN32` en el ejecutable para evitar la consola de fondo. Vinculación estática del C++ Runtime.
+
+### 6. Intervención del Sistema (API Win32)
+
+* **Manipulación del Scheduler:** El proceso `WindowHost` (Shell Win32) debe elevarse a `ABOVE_NORMAL_PRIORITY_CLASS`. Los procesos hijos del renderer de WebView2 deben mantenerse o forzarse a `NORMAL` o `BELOW_NORMAL` para no saturar los 4 hilos del Celeron.
+* **Paginación Forzada (Memory Trimming):** Implementar un temporizador Win32 (`SetTimer`) que detecte inactividad del usuario (ej. 30 segundos sin input) y ejecute `SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1)` para forzar la paginación de la RAM inactiva al swap, repitiendo esto de forma segura para los procesos hijos de Chromium detectados.
+
+### Entregables Requeridos (Código Listo para Producción)
+
+No quiero resúmenes, explicaciones introductorias ni código pseudo-funcional. Genera el código modular completo, documentado (comentarios técnicos Doxygen) y listo para compilar:
+
+1. **Estructura del Proyecto:** Un árbol de directorios exacto demostrando la separación de archivos (`src/`, `include/`, `lib/`, `.github/workflows/`).
+2. **`CMakeLists.txt`:** Configurado milimétricamente con todos los flags de Clang indicados, detección del compilador y la vinculación estática de `mimalloc`.
+3. **`src/system/MemoryOptimizer.hpp/cpp`:** Lógica de manipulación del Working Set, reemplazo del allocator y prioridades de hilos Win32.
+4. **`src/window/WindowHost.hpp/cpp`:** Código Win32 puro, sin bordes, DWM, fondo negro y HitTesting.
+5. **`src/browser/WebViewEngine.hpp/cpp`:** Inicialización de WebView2, inyección de los flags de Chromium (V8, Zero-Copy), inyección del DOM script y carga de uBlock Origin.
+6. **`src/main.cpp`:** El punto de entrada ligero que orquesta los módulos.
+7. **`.github/workflows/release.yml`:** El flujo de CI/CD para compilar con Clang en Windows y publicar el ejecutable optimizado. y mas

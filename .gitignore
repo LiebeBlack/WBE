@@ -1,0 +1,27 @@
+# Build
+build/
+build-*/
+out/
+cmake-build-*/
+
+# Dependencias descargadas por CMake
+_deps/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+
+# Sistema
+Thumbs.db
+Desktop.ini
+
+# Artefactos locales de distribución
+dist/
+*.zip
+
+# Extensiones locales (el release de CI la genera)
+extensions/uBlock/
+extensions/*/
+!extensions/README.md

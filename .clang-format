@@ -1,0 +1,7 @@
+BasedOnStyle: LLVM
+Standard: c++20
+IndentWidth: 4
+ColumnLimit: 88
+AllowShortFunctionsOnASingleLine: Inline
+PointerAlignment: Right
+AlwaysBreakTemplateDeclarations: Yes

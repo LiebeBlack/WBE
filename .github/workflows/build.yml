@@ -1,0 +1,40 @@
+name: Build (validación)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar Ninja
+        run: choco install ninja -y --no-progress
+
+      - name: Preparar MSVC (enlaces del SDK para clang-cl)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configurar
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_C_COMPILER=clang-cl
+          -DCMAKE_CXX_COMPILER=clang-cl
+          -DCMAKE_BUILD_TYPE=MinSizeRel
+
+      - name: Compilar
+        run: cmake --build build --parallel
+
+      - name: Subir artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: SMAC-WebCore-win64
+          path: build/SMAC-WebCore.exe
+          if-no-files-found: error
