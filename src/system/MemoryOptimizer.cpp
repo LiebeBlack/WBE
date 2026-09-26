@@ -19,17 +19,11 @@
 
 #include <cstddef>
 #include <cstdlib>
+#include <malloc.h>      // _callnewh (declaración _ACRTIMP del UCRT)
 #include <new>
 #include <mimalloc.h>
 #include <psapi.h>
 #include <tlhelp32.h>
-
-#ifdef SMAC_MIMALLOC
-extern "C" {
-/** Primitiva del CRT MSVC que dispara el new_handler en OOM. */
-__declspec(dllimport) int __cdecl _callnewh(size_t size);
-}
-#endif
 
 namespace smac::mem {
 
@@ -37,20 +31,29 @@ namespace smac::mem {
 //  Con -fno-exceptions el fallo de asignación no puede propagarse: si el
 //  new_handler no libera nada, abortamos de forma controlada y registrada.
 
-#ifdef SMAC_MIMALLOC
-
 /** Aborta el proceso ante OOM (terminación limpia y registrada). */
-[[noreturn]] static void AbortOom() {
+[[noreturn]] void smac_abort_oom() {
     log::Error("mem: OOM fatal, abortando proceso");
     TerminateProcess(GetCurrentProcess(), 3);
     _exit(3);   // por si TerminateProcess no llegara a ejecutarse
 }
 
+} // namespace smac::mem
+
+// ----------------------------------------------------------------------------
+//  Reemplazo de operator new/delete.
+//  [replacement.functions] obliga a que las funciones de reemplazo se declaren
+//  en el ámbito GLOBAL: Clang rechaza definirlas dentro de un namespace
+//  ("'operator new' cannot be declared inside a namespace"). Aquí fuera del
+//  namespace, por tanto; el aborto de OOM vive en smac::mem por claridad.
+// ----------------------------------------------------------------------------
+#ifdef SMAC_MIMALLOC
+
 void* operator new(std::size_t size) {
     if (void* p = mi_malloc(size)) return p;
-    if (_callnewh(size) == 0) AbortOom();
+    if (_callnewh(size) == 0) smac::mem::smac_abort_oom();
     if (void* p = mi_malloc(size)) return p;
-    AbortOom();
+    smac::mem::smac_abort_oom();
 }
 
 void* operator new[](std::size_t size) {
@@ -73,12 +76,20 @@ void operator delete[](void* p, const std::nothrow_t&) noexcept { mi_free(p); }
 void* operator new(std::size_t size, std::align_val_t al) {
     const size_t alignment = static_cast<size_t>(al);
     if (void* p = mi_malloc_aligned(size, alignment)) return p;
-    if (_callnewh(size) == 0) AbortOom();
+    if (_callnewh(size) == 0) smac::mem::smac_abort_oom();
     if (void* p = mi_malloc_aligned(size, alignment)) return p;
-    AbortOom();
+    smac::mem::smac_abort_oom();
 }
 void* operator new[](std::size_t size, std::align_val_t al) {
     return ::operator new(size, al);
+}
+void* operator new(std::size_t size, std::align_val_t al,
+                   const std::nothrow_t&) noexcept {
+    return mi_malloc_aligned(size, static_cast<size_t>(al));
+}
+void* operator new[](std::size_t size, std::align_val_t al,
+                     const std::nothrow_t&) noexcept {
+    return mi_malloc_aligned(size, static_cast<size_t>(al));
 }
 void operator delete(void* p, std::align_val_t) noexcept { mi_free(p); }
 void operator delete[](void* p, std::align_val_t) noexcept { mi_free(p); }
@@ -89,9 +100,23 @@ void operator delete[](void* p, std::align_val_t, const std::nothrow_t&) noexcep
     mi_free(p);
 }
 
+// Variantes con tamaño (C++14): si el compilador emite la llamada con tamaño,
+// sin estas sobrecargas acabaría en el delete del CRT y haría free() sobre
+// memoria de mimalloc (corrupción de heap silenciosa).
+void operator delete(void* p, std::size_t) noexcept { mi_free(p); }
+void operator delete[](void* p, std::size_t) noexcept { mi_free(p); }
+void operator delete(void* p, std::size_t, std::align_val_t) noexcept {
+    mi_free(p);
+}
+void operator delete[](void* p, std::size_t, std::align_val_t) noexcept {
+    mi_free(p);
+}
+
 #endif // SMAC_MIMALLOC
 
 // ============================ API declarada =================================
+
+namespace smac::mem {
 
 void InstallAllocator() {
     // El reemplazo es estático (sobrecargas de arriba); aquí solo validamos
@@ -171,11 +196,6 @@ void TrimChildrenProcesses() {
     CloseHandle(snap);
 }
 
-/** TIMERPROC: se ejecuta en el hilo UI (el que instaló el timer). */
-void CALLBACK TrimTimerProc(HWND, UINT, UINT_PTR, DWORD) {
-    TrimTick();
-}
-
 /** Tick del temporizador: decide y ejecuta el trim. */
 void TrimTick() {
     g_lastTrimmed = false;
@@ -195,6 +215,11 @@ void TrimTick() {
 
     g_lastTrimTick = now;
     g_lastTrimmed  = true;
+}
+
+/** TIMERPROC: se ejecuta en el hilo UI (el que instaló el timer). */
+void CALLBACK TrimTimerProc(HWND, UINT, UINT_PTR, DWORD) {
+    TrimTick();   // definido justo arriba: el timer solo necesita su dirección
 }
 
 } // namespace
